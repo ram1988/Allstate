@@ -13,6 +13,10 @@ from sklearn import cross_validation
 from sklearn import tree
 from  sklearn import feature_selection  
 
+from pybrain.datasets import SupervisedDataSet
+from pybrain.tools.shortcuts import buildNetwork
+from pybrain.supervised.trainers import BackpropTrainer
+
 #http://blog.yhathq.com/posts/logistic-regression-and-python.html
 
 def getdb():
@@ -415,7 +419,41 @@ def predict_test(models):
 		
 		feat_gen.write(str(cid)+","+opt_vectors+"\n")
 	feat_gen.close()
+
+
+def prepare_neural_models():
+	train_df = pd.read_csv("train_set.csv")
+	prod_options = ['a','b','c','d','e','f','g']
 	
+	neural_models = []
+	for opt in prod_options:
+		if opt == "a":
+			train_cols =  [train_df.columns[3],train_df.columns[4],train_df.columns[15]]
+		elif opt == "b":
+			train_cols =  [train_df.columns[3],train_df.columns[4],train_df.columns[16]]
+		elif opt == "c":
+			train_cols =  [train_df.columns[3],train_df.columns[4],train_df.columns[17]]
+		elif opt == "d":
+			train_cols =  [train_df.columns[3],train_df.columns[4],train_df.columns[18]]
+		elif opt == "e":
+			train_cols =  [train_df.columns[3],train_df.columns[4],train_df.columns[19]]
+		elif opt == "f":
+			train_cols =  [train_df.columns[3],train_df.columns[4],train_df.columns[20]]
+		elif opt == "g":
+			train_cols =  [train_df.columns[3],train_df.columns[4],train_df.columns[21]]
+			
+		dataset = SupervisedDataSet(3,1)
+		for df in train_df:
+			dataset.addSample((df[1][train_cols[0]],df[1][train_cols[1]],df[1][train_cols[2]]),(df[opt],))
+		#neural_ds.append(dataset)
+	
+		net = buildNetwork(3, 3, 1, bias=True, hiddenclass=TanhLayer)
+		neural_trainer = BackpropTrainer(net,dataset)
+		neural_trainer.train()
+		neural_models.append(neural_trainer)	
+		
+	return neural_models
+		
 #prepare_trainset()
 #cross_validate_model(10)
 models = train_classifier()
