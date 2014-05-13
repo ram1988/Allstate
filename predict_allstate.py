@@ -13,11 +13,13 @@ from sklearn import cross_validation
 from sklearn import tree
 from  sklearn import feature_selection  
 
-from pybrain.datasets import SupervisedDataSet
+from pybrain.datasets import ClassificationDataSet
 from pybrain.tools.shortcuts import buildNetwork
 from pybrain.supervised.trainers import BackpropTrainer
+from pybrain.structure.modules   import SoftmaxLayer
 
 #http://blog.yhathq.com/posts/logistic-regression-and-python.html
+#http://pybrain.org/docs/tutorial/datasets.html#superviseddataset
 
 def getdb():
 	return MySQLdb.connect("localhost", "root", "lumos123", "allstate")
@@ -314,28 +316,33 @@ def predict_test(models):
 	print "predicting..."
 	for prod in prod_options:
 		print "generating retain prob for option"+prod
-		query = "SELECT cid,count(*) from test_dataset group by cid,"+prod
+		query = "SELECT cid,count(*),"+prod+" from test_dataset group by cid,"+prod
 		cursor = db.cursor()
 		lines = cursor.execute(query)
 		rest = cursor.fetchall()
 		id = rest[0][0]
 		max = 0
 		tot = 0
+		num = 0
 		cids_retain = {}
 		for r in rest:
 			curr_id = r[0]
 			if id!=curr_id:
-				cids_retain[id] = round(float(max)/float(tot),2)
+				#cids_retain[id] = round(float(max)/float(tot),2)
+				cids_retain[id] = num
 				max = r[1]
+				num = r[2]
 				tot = 0
 				id = curr_id
 			else:
 				if r[1]>max:
 					max = r[1]
+					num = r[2]
 			tot += r[1]
-		cids_retain[id] = round(float(max)/float(tot),2)
+		#cids_retain[id] = round(float(max)/float(tot),2)
+		cids_retain[id] = num
 		prod_rsets[prod] = cids_retain
-	
+		
 	test_data = []
 	
 	for r in rset:
@@ -425,39 +432,182 @@ def prepare_neural_models():
 	train_df = pd.read_csv("train_set.csv")
 	prod_options = ['a','b','c','d','e','f','g']
 	
-	neural_models = []
+	neural_models = {}
+	print "Neural Network Building..."
 	for opt in prod_options:
+		print "Readying for the option"+opt
 		if opt == "a":
+			dataset = ClassificationDataSet(3,3,class_labels=[0,1,2])
 			train_cols =  [train_df.columns[3],train_df.columns[4],train_df.columns[15]]
 		elif opt == "b":
+			dataset = ClassificationDataSet(3,2,class_labels=[0,1])
 			train_cols =  [train_df.columns[3],train_df.columns[4],train_df.columns[16]]
 		elif opt == "c":
+			dataset = ClassificationDataSet(3,4,class_labels=[1,2,3,4])
 			train_cols =  [train_df.columns[3],train_df.columns[4],train_df.columns[17]]
 		elif opt == "d":
+			dataset = ClassificationDataSet(3,3,class_labels=[1,2,3])
 			train_cols =  [train_df.columns[3],train_df.columns[4],train_df.columns[18]]
 		elif opt == "e":
+			dataset = ClassificationDataSet(3,2,class_labels=[0,1])
 			train_cols =  [train_df.columns[3],train_df.columns[4],train_df.columns[19]]
 		elif opt == "f":
+			dataset = ClassificationDataSet(3,4,class_labels=[0,1,2,3])
 			train_cols =  [train_df.columns[3],train_df.columns[4],train_df.columns[20]]
 		elif opt == "g":
+			dataset = ClassificationDataSet(3,4,class_labels=[1,2,3,4])
 			train_cols =  [train_df.columns[3],train_df.columns[4],train_df.columns[21]]
 			
-		dataset = SupervisedDataSet(3,1)
-		for df in train_df:
-			dataset.addSample((df[1][train_cols[0]],df[1][train_cols[1]],df[1][train_cols[2]]),(df[opt],))
+		
+		for df in train_df.iterrows():
+			dataset.addSample((df[1][train_cols[0]],df[1][train_cols[1]],df[1][train_cols[2]]),(df[1][opt],))
 		#neural_ds.append(dataset)
 	
-		net = buildNetwork(3, 3, 1, bias=True, hiddenclass=TanhLayer)
+		net = buildNetwork(dataset.indim, 3, dataset.outdim, outclass=SoftmaxLayer)
 		neural_trainer = BackpropTrainer(net,dataset)
 		neural_trainer.train()
-		neural_models.append(neural_trainer)	
+		neural_models[opt] = neural_trainer
 		
 	return neural_models
 		
+def test_neurals(models):
+	feat_gen = open("final_submit.csv","w+")
+	feat_gen.write("customer_ID,plan\n")
+	
+	#query = "SELECT s.cid,grp_size,homeowner,car_val,(((car_age-u.avg_age)/(max_age-min_age))*risk_factor*grp_size) as ip,married,c_prev,age_oldest,age_youngest,a,b,c,d,e,f,g,avg_a,avg_b,avg_c,avg_d,avg_e,avg_f,avg_g,cover_cost from test_dataset s, (SELECT cid,round(avg(a)) as avg_a,round(avg(b)) as avg_b,round(avg(c)) as avg_c,round(avg(d)) as avg_d,round(avg(e)) as avg_e,round(avg(f)) as avg_f,round(avg(g)) as avg_g,max(shop_pt)as max_pt,avg(cost) as cover_cost from test_dataset group by cid) t, (SELECT avg(car_age) as avg_age,max(car_age) as max_age,min(car_age) as min_age FROM train_dataset) u  where s.cid=t.cid and s.shop_pt=max_pt"
+	query = "SELECT s.cid,grp_size,homeowner,car_val,(((car_age-u.avg_age)/(max_age-min_age))*risk_factor*grp_size) as ip,married,c_prev,age_oldest,age_youngest,a,b,c,d,e,f,g,a,b,c,d,e,f,g,cover_cost from test_dataset s, (SELECT cid,max(shop_pt)as max_pt,avg(cost) as cover_cost from test_dataset group by cid) t, (SELECT avg(car_age) as avg_age,max(car_age) as max_age,min(car_age) as min_age FROM train_dataset) u  where s.cid=t.cid and s.shop_pt=max_pt"
+	db = getdb()
+	cursor = db.cursor()
+	lines = cursor.execute(query)
+	rset = cursor.fetchall()
+	prod_options = ['a','b','c','d','e','f','g']
+	
+	prod_rsets = {}
+	print "predicting..."
+	for prod in prod_options:
+		print "generating retain prob for option"+prod
+		query = "SELECT cid,count(*) from test_dataset group by cid,"+prod
+		cursor = db.cursor()
+		lines = cursor.execute(query)
+		rest = cursor.fetchall()
+		id = rest[0][0]
+		max = 0
+		tot = 0
+		cids_retain = {}
+		for r in rest:
+			curr_id = r[0]
+			if id!=curr_id:
+				cids_retain[id] = round(float(max)/float(tot),2)
+				max = r[1]
+				tot = 0
+				id = curr_id
+			else:
+				if r[1]>max:
+					max = r[1]
+			tot += r[1]
+		cids_retain[id] = round(float(max)/float(tot),2)
+		prod_rsets[prod] = cids_retain
+	
+	test_data = []
+	
+	for r in rset:
+		cid = r[0]
+		print "customer--->"+str(cid)
+		#car value
+		car_val = r[3]
+		if car_val == "a":
+			car_val = 1
+		elif car_val == "b":
+			car_val = 2
+		elif car_val == "c":
+			car_val = 3
+		elif car_val == "d":
+			car_val = 4
+		elif car_val == "e":
+			car_val = 5
+		elif car_val == "f":
+			car_val = 6
+		elif car_val == "g":
+			car_val = 7
+		elif car_val == "h":
+			car_val = 8
+		elif car_val == "i":
+			car_val = 9
+			
+		#risk factor
+		risk_fac = r[4]
+		'''
+		if risk_fac == 1:
+			risk_fac = 1
+		elif risk_fac == 2: 
+			risk_fac = 0.5
+		elif risk_fac == 3: 
+			risk_fac = 0.25
+		elif risk_fac == 4: 
+			risk_fac = 0
+		'''
+		
+		age_old = r[7]
+		age_yg = r[8]
+		age_diff = round(float(age_old-age_yg)/float(age_old),2)
+		
+		#c_prev
+		c_prev = r[6]
+		if c_prev == r[18]:
+			c_prev_retain = 1
+		else:
+			c_prev_retain = 0
+			
+			
+		test_data.append([cid,r[1],r[2],car_val,risk_fac,r[5],c_prev_retain,age_diff,prod_rsets["a"][cid],prod_rsets["b"][cid],prod_rsets["c"][cid],prod_rsets["d"][cid],prod_rsets["e"][cid],prod_rsets["f"][cid],prod_rsets["g"][cid],r[16],r[17],r[18],r[19],r[20],r[21],r[22],r[23],r[9],r[10],r[11],r[12],r[13],r[14],r[15]])
+			
+	test_data = pd.DataFrame(test_data,columns=["cid","grp_size","homeowner","car_val","risk_factor","married","c_prev","age_diff","a_rt","b_rt","c_rt","d_rt","e_rt","f_rt","g_rt","avg_a","avg_b","avg_c","avg_d","avg_e","avg_f","avg_g","cost","a","b","c","d","e","f","g"])
+	
+	#print test_data
+	
+	for df in test_data.iterrows():
+		output = ""
+		print "predicting cid->"+str(df[1]["cid"])
+		
+		
+		for opt in prod_options:
+			if opt == "a":
+				dataset = ClassificationDataSet(3,3,class_labels=[0,1,2])
+				test_cols =  [test_data.columns[3],test_data.columns[4],test_data.columns[15]]
+			elif opt == "b":
+				dataset = ClassificationDataSet(3,2,class_labels=[0,1])
+				test_cols =  [test_data.columns[3],test_data.columns[4],test_data.columns[16]]
+			elif opt == "c":
+				dataset = ClassificationDataSet(3,4,class_labels=[1,2,3,4])
+				test_cols =  [test_data.columns[3],test_data.columns[4],test_data.columns[17]]
+			elif opt == "d":
+				dataset = ClassificationDataSet(3,3,class_labels=[1,2,3])
+				test_cols =  [test_data.columns[3],test_data.columns[4],test_data.columns[18]]
+			elif opt == "e":
+				dataset = ClassificationDataSet(3,2,class_labels=[0,1])
+				test_cols =  [test_data.columns[3],test_data.columns[4],test_data.columns[19]]
+			elif opt == "f":
+				dataset = ClassificationDataSet(3,4,class_labels=[0,1,2,3])
+				test_cols =  [test_data.columns[3],test_data.columns[4],test_data.columns[20]]
+			elif opt == "g":
+				dataset = ClassificationDataSet(3,4,class_labels=[1,2,3,4])
+				test_cols =  [test_data.columns[3],test_data.columns[4],test_data.columns[21]]
+			
+			dataset.addSample((df[1][test_cols[0]],df[1][test_cols[1]],df[1][test_cols[2]]),(0,))
+			list = models[opt].testOnClassData(dataset)
+			print list
+			output += str(list[0])
+		feat_gen.write(df[1]["cid"]+","+output+"\n")
+	
+	feat_gen.close()
+		
+	
 #prepare_trainset()
 #cross_validate_model(10)
-models = train_classifier()
-predict_test(models)
+#models = train_classifier()
+#predict_test(models)
+models = prepare_neural_models()
+test_neurals(models)
 '''
 
 '''
