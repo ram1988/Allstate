@@ -437,25 +437,25 @@ def prepare_neural_models():
 	for opt in prod_options:
 		print "Readying for the option"+opt
 		if opt == "a":
-			dataset = ClassificationDataSet(3,3,class_labels=[0,1,2])
+			dataset = ClassificationDataSet(3,3,3,class_labels=[0,1,2])
 			train_cols =  [train_df.columns[3],train_df.columns[4],train_df.columns[15]]
 		elif opt == "b":
-			dataset = ClassificationDataSet(3,2,class_labels=[0,1])
+			dataset = ClassificationDataSet(3,2,2,class_labels=[0,1])
 			train_cols =  [train_df.columns[3],train_df.columns[4],train_df.columns[16]]
 		elif opt == "c":
-			dataset = ClassificationDataSet(3,4,class_labels=[1,2,3,4])
+			dataset = ClassificationDataSet(3,4,4,class_labels=[1,2,3,4])
 			train_cols =  [train_df.columns[3],train_df.columns[4],train_df.columns[17]]
 		elif opt == "d":
-			dataset = ClassificationDataSet(3,3,class_labels=[1,2,3])
+			dataset = ClassificationDataSet(3,3,3,class_labels=[1,2,3])
 			train_cols =  [train_df.columns[3],train_df.columns[4],train_df.columns[18]]
 		elif opt == "e":
-			dataset = ClassificationDataSet(3,2,class_labels=[0,1])
+			dataset = ClassificationDataSet(3,2,2,class_labels=[0,1])
 			train_cols =  [train_df.columns[3],train_df.columns[4],train_df.columns[19]]
 		elif opt == "f":
-			dataset = ClassificationDataSet(3,4,class_labels=[0,1,2,3])
+			dataset = ClassificationDataSet(3,4,4,class_labels=[0,1,2,3])
 			train_cols =  [train_df.columns[3],train_df.columns[4],train_df.columns[20]]
 		elif opt == "g":
-			dataset = ClassificationDataSet(3,4,class_labels=[1,2,3,4])
+			dataset = ClassificationDataSet(3,4,4,class_labels=[1,2,3,4])
 			train_cols =  [train_df.columns[3],train_df.columns[4],train_df.columns[21]]
 			
 		
@@ -464,9 +464,10 @@ def prepare_neural_models():
 		#neural_ds.append(dataset)
 	
 		net = buildNetwork(dataset.indim, 3, dataset.outdim, outclass=SoftmaxLayer)
+		print "Indim-->"+str(dataset.indim)+"---Outdim-->"+str(dataset.outdim)
 		neural_trainer = BackpropTrainer(net,dataset)
 		neural_trainer.train()
-		neural_models[opt] = neural_trainer
+		neural_models[opt] = net
 		
 	return neural_models
 		
@@ -572,32 +573,46 @@ def test_neurals(models):
 		
 		for opt in prod_options:
 			if opt == "a":
-				dataset = ClassificationDataSet(3,3,class_labels=[0,1,2])
+				dataset = ClassificationDataSet(3,1,3,class_labels=[0,1,2])
+				class_labels=[0,1,2]
 				test_cols =  [test_data.columns[3],test_data.columns[4],test_data.columns[15]]
 			elif opt == "b":
-				dataset = ClassificationDataSet(3,2,class_labels=[0,1])
+				dataset = ClassificationDataSet(3,1,2,class_labels=[0,1])
+				class_labels=[0,1]
 				test_cols =  [test_data.columns[3],test_data.columns[4],test_data.columns[16]]
 			elif opt == "c":
-				dataset = ClassificationDataSet(3,4,class_labels=[1,2,3,4])
+				dataset = ClassificationDataSet(3,1,4,class_labels=[1,2,3,4])
+				class_labels=[1,2,3,4]
 				test_cols =  [test_data.columns[3],test_data.columns[4],test_data.columns[17]]
 			elif opt == "d":
-				dataset = ClassificationDataSet(3,3,class_labels=[1,2,3])
+				dataset = ClassificationDataSet(3,1,3,class_labels=[1,2,3])
+				class_labels=[1,2,3]
 				test_cols =  [test_data.columns[3],test_data.columns[4],test_data.columns[18]]
 			elif opt == "e":
-				dataset = ClassificationDataSet(3,2,class_labels=[0,1])
+				dataset = ClassificationDataSet(3,1,2,class_labels=[0,1])
+				class_labels=[0,1]
 				test_cols =  [test_data.columns[3],test_data.columns[4],test_data.columns[19]]
 			elif opt == "f":
-				dataset = ClassificationDataSet(3,4,class_labels=[0,1,2,3])
+				dataset = ClassificationDataSet(3,1,4,class_labels=[0,1,2,3])
+				class_labels=[0,1,2,3]
 				test_cols =  [test_data.columns[3],test_data.columns[4],test_data.columns[20]]
 			elif opt == "g":
-				dataset = ClassificationDataSet(3,4,class_labels=[1,2,3,4])
+				dataset = ClassificationDataSet(3,1,4,class_labels=[1,2,3,4])
+				class_labels=[1,2,3,4]
 				test_cols =  [test_data.columns[3],test_data.columns[4],test_data.columns[21]]
 			
-			dataset.addSample((df[1][test_cols[0]],df[1][test_cols[1]],df[1][test_cols[2]]),(0,))
-			list = models[opt].testOnClassData(dataset)
-			print list
-			output += str(list[0])
-		feat_gen.write(df[1]["cid"]+","+output+"\n")
+			#dataset.addSample(,(0,))
+			list = models[opt].activate((df[1][test_cols[0]],df[1][test_cols[1]],df[1][test_cols[2]]))
+			max = 0
+			idx = 0
+			max_idx = 0
+			for op in list:
+				if op > max:
+					max = op
+					max_idx = idx
+				idx+=1
+			output += str(class_labels[max_idx])
+		feat_gen.write(str(df[1]["cid"])+","+output+"\n")
 	
 	feat_gen.close()
 		
